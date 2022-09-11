@@ -46,6 +46,11 @@ export interface ResourceConfig {
     clearingNumber: string | number;
     maximumNumberOfAccounts: number;
   };
+  cards: {
+    cost: number;
+    pinLength: number;
+    maxCardsPerAccount: number;
+  };
   cash: {
     startAmount: number;
   };
