@@ -16,6 +16,7 @@ import {
   AddToUniqueAccountInput,
   RemoveFromUniqueAccountInput,
   UpdateBankBalanceByNumberInput,
+  GetATMAccountInput,
 } from '@typings/Account';
 import { UserService } from '../user/user.service';
 import { config } from '@utils/server-config';
@@ -31,16 +32,21 @@ import {
   AccountErrors,
   AuthorizationErrors,
   BalanceErrors,
+  CardErrors,
   GenericErrors,
   UserErrors,
 } from '@typings/Errors';
 import { SharedAccountDB } from '@services/accountShared/sharedAccount.db';
 import { AccountEvents, Broadcasts } from '@server/../../typings/Events';
+import { getFrameworkExports } from '@server/utils/frameworkIntegration';
+import { CardDB } from '../card/card.db';
 
 const logger = mainLogger.child({ module: 'accounts' });
+const isFrameworkIntegrationEnabled = config.frameworkIntegration?.enabled;
 
 @singleton()
 export class AccountService {
+  _cardDB: CardDB;
   _accountDB: AccountDB;
   _sharedAccountDB: SharedAccountDB;
   _cashService: CashService;
@@ -53,7 +59,9 @@ export class AccountService {
     userService: UserService,
     cashService: CashService,
     transactionService: TransactionService,
+    cardDB: CardDB,
   ) {
+    this._cardDB = cardDB;
     this._accountDB = accountDB;
     this._sharedAccountDB = sharedAccountDB;
     this._cashService = cashService;
@@ -441,25 +449,37 @@ export class AccountService {
   }
 
   async handleWithdrawMoney(req: Request<ATMInput>) {
-    logger.silly(`"${req.source}" withdrawing "${req.data.amount}".`);
-    const amount = req.data.amount;
+    const { accountId, amount, cardId, cardPin } = req.data;
+    logger.silly(`"${req.source}" withdrawing "${amount}".`);
 
     if (amount <= 0) {
       throw new ServerError(GenericErrors.BadInput);
     }
 
-    /* Only run the export when account is the default(?). Not sure about this. */
     const t = await sequelize.transaction();
     try {
-      const targetAccount = req.data.accountId
-        ? await this._accountDB.getAccountById(req.data.accountId)
-        : await this.getDefaultAccountBySource(req.source);
+      /* If framework is enabled, do a card check, otherwise continue. */
+      if (isFrameworkIntegrationEnabled) {
+        const exports = getFrameworkExports();
+        const cards = exports.getCards(req.source);
+        const selectedCard = cards.find((card) => card.id === cardId);
+
+        if (!selectedCard) {
+          throw new Error('User does not have selected card in inventory.');
+        }
+
+        const card = await this._cardDB.getById(selectedCard.id);
+        if (card?.getDataValue('pin') !== cardPin) {
+          throw new Error(CardErrors.InvalidPin);
+        }
+      }
+
+      const targetAccount = await this._accountDB.getAccountById(accountId);
 
       if (!targetAccount) {
         throw new ServerError(GenericErrors.NotFound);
       }
 
-      const accountId = targetAccount.getDataValue('id') ?? 0;
       const currentAccountBalance = targetAccount.getDataValue('balance');
 
       if (currentAccountBalance < amount) {

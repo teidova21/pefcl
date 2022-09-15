@@ -6,6 +6,7 @@ import { Broadcasts } from '@typings/Events';
 import { TransactionDB } from '../transaction/transaction.db';
 import { Account } from '@server/../../typings/Account';
 import { Cash } from '@server/../../typings/Cash';
+import { Card } from '@server/../../typings/BankCard';
 
 const logger = mainLogger.child({ module: 'broadcastService' });
 
@@ -27,6 +28,16 @@ export class BroadcastService {
     if (!user) return;
 
     emitNet(Broadcasts.UpdatedAccount, user?.getSource(), account);
+  }
+
+  async broadcastNewCard(card: Card) {
+    logger.silly(`Broadcasted new card:`);
+    logger.silly(JSON.stringify(card));
+
+    const user = this._userService.getUserByIdentifier(card.holderCitizenId);
+    if (!user) return;
+
+    emitNet(Broadcasts.NewCard, user?.getSource(), card);
   }
 
   async broadcastTransaction(transaction: Transaction) {

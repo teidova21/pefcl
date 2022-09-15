@@ -12,6 +12,7 @@ const frameworkIntegrationKeys: FrameworkIntegrationFunction[] = [
   'addCash',
   'removeCash',
   'getCash',
+  'giveCard',
 ];
 
 export const validateResourceExports = (resourceExports: FrameworkIntegrationExports): boolean => {
